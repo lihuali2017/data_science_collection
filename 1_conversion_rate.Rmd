@@ -1,0 +1,91 @@
+---
+title: "1. Conversion Rate"
+author: "Lihua Li"
+date: "January 19, 2018"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Readin csv file 
+```{r readdata}
+raw_df <- read.csv("../conversion_data.csv")
+```
+
+# Handle abnormal data 
+```{r}
+summary(raw_df)
+```
+Max age 123 seems not practical. Need a little investigation here.
+
+```{r}
+df_outlier <- subset(raw_df, age >= 100)
+new_df <- subset(raw_df, age < 100)
+summary(new_df)
+```
+Now max age being 79 is making more sense. 
+
+# Study regions and its relationship to conversion rates 
+```{r country, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+```{r plot}
+country_count <- new_df %>% group_by(country) %>% summarise(count = n())
+country_conversion <- new_df %>% group_by(country) %>% summarise(convert_rate = mean(converted))
+
+ggplot(data = country_count, aes(x = country, y = count))+ geom_bar(stat = "identity", aes(fill = country))
+ggplot(data = country_conversion, aes(x = country, y = convert_rate))+ geom_bar(stat = "identity", aes(fill = country))
+```
+Quick two findings: 
+1. There are a lot of users coming from China, but China has the lowest conversion rate. (Marketing team should investigate see if the website/product is culturally fit with Chinese)
+2. Germany has the highest conversion rate, however, there is not many users coming from Germany. (Marketing team should broader their market to Germany)
+
+# Study relationship between age and conversion rates
+```{r}
+age_count <- new_df %>% group_by(age) %>% summarise(count=n())
+age_conversion <- new_df %>% group_by(age) %>% summarise(convert_rate = mean(converted))
+
+ggplot(data = age_count, aes(x = age, y = count)) + geom_line(stat = 'identity', position = 'identity')
+ggplot(data = age_conversion, aes(x = age, y = convert_rate)) + geom_line(stat = 'identity', position = 'identity')
+```
+The conversion rate is declining as age increases, and there is not many users above age 60, hence the bump around age 60 is simply due to noise.
+
+# Study relationship between conversion rate and whether this user is repeat or not
+```{r}
+newuser_count <- new_df %>% group_by(new_user) %>% summarise(count=n())
+newuser_conversion <- new_df %>% group_by(new_user) %>% summarise(convert_rate = mean(converted))
+
+ggplot(data = newuser_count, aes(x = new_user, y = count)) + geom_bar(stat = 'identity', aes(fill = new_user))
+ggplot(data = newuser_conversion, aes(x = new_user, y = convert_rate)) + geom_bar(stat = 'identity', aes(fill = new_user))
+```
+The number of new users coming to this site is more than twice of repeat users, which is a sign of this product being not sticky enough. Since new users have much lower conversion rate than repeat users, marketing team should try to run promotions to existing users for bringing them back, rather than advertizing to new users. On the other hand, the team should survey new users to see the reasons of why they do not want to convert. 
+
+# Study relationship between conversion rate and source
+```{r}
+source_count <- new_df %>% group_by(source) %>% summarise(count = n())
+source_conversion <- new_df %>% group_by(source) %>% summarise(convert_rate = mean(converted))
+
+ggplot(data = source_count, aes(x = source, y = count)) + geom_bar(stat = 'identity', aes(fill = source))
+ggplot(data = source_conversion, aes(x = source, y = convert_rate)) + geom_bar(stat = 'identity', aes(fill = source))
+```
+Ads has the highest conversion rate even though it does not have the highest visiting rates. 
+
+# Study relationship between conversion rate and total_pages_visited
+```{r}
+pages_count <- new_df %>% group_by(total_pages_visited) %>% summarise(count=n())
+pages_conversion <- new_df %>% group_by(total_pages_visited) %>% summarise(convert_rate = mean(converted))
+
+ggplot(data = pages_count, aes(x = total_pages_visited, y = count)) + geom_line(stat = 'identity', position = 'identity')
+ggplot(data = pages_conversion, aes(x = total_pages_visited, y = convert_rate)) + geom_line(stat = 'identity', position = 'identity')
+```
+The amount of ppl who visited above 10 pages dramatically decreases, however, once they visited more than 10 pages, the conversion rate is much higher and almost guaranteed to be converted if they have visited above 20 pages. This may imply that those consumers who are more interested in the product are more likely to spend more time on the website. But this could also be a sign that the website may fail to emphasize the strength of the product at the first few pages. 
+
+
+# Time to build a predictive model
+The outcome of this problem is binary, so I am going to build a random forest model. Random forest is robust to outliers and irrelevant variables. 
+
