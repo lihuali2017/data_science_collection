@@ -87,5 +87,21 @@ The amount of ppl who visited above 10 pages dramatically decreases, however, on
 
 
 # Time to build a predictive model
-The outcome of this problem is binary, so I am going to build a random forest model. Random forest is robust to outliers and irrelevant variables. 
+The outcome of this problem is binary, so I am going to build a random forest model. Random forest is robust to outliers and irrelevant variables. Also the partial dependence and variable importance plots can give really good insights about the variables.
+```{r}
+new_df$converted = as.factor(new_df$converted)
+new_df$new_user = as.factor(new_df$new_user)
+```
+Split the data into training and testing, and train a model on training and validate on testing.
+```{r}
+train_sample = sample(nrow(new_df), size = nrow(new_df) * 0.7)
+train_data = new_df[train_sample,]
+test_data = new_df[-train_sample,]
 
+rf_model = randomForest(y = train_data$converted, x = train_data[, -ncol(train_data)], ytest = test_data$converted, xtest = train_data[,-ncol(test_data)], ntree = 100, mtry = 3)
+rf_model
+```
+Check the partial relationship between variables and convertion 
+```{r}
+varImp
+```
