@@ -1,0 +1,80 @@
+---
+title: "3_translation_ab_test"
+author: "Lihua Li"
+date: "2/2/2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Set up libraries 
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+# Readin csv file 
+```{r readdata}
+df_users <- read.csv("../Translation_Test/user_table.csv")
+df_tests <- read.csv("../Translation_Test/test_table.csv")
+summary(df_users)
+summary(df_tests)
+length(unique(df_users$user_id)) == length(df_users$user_id)
+length(unique(df_tests$user_id)) == length(df_tests$user_id)
+dim(df_users)
+dim(df_tests)
+```
+There is no duplicates in either dataset. And there are some users existing in users table but not in test table.
+
+# Merge two tables together by user_id
+```{r}
+full_df <- merge(df_users, df_tests, by = 'user_id', all.y = TRUE)
+str(full_df)
+```
+Date should not be a factor variable, we should change it to be date format.
+```{r}
+full_df$date = as.Date(full_df$date)
+summary(full_df)
+```
+Check if it is true that Latin converts more than the rest of countries.
+```{r}
+convert_by_country <- full_df %>% group_by(country) %>% summarize(convert_rate = mean(conversion[test == 0])) %>% arrange(desc(convert_rate))
+
+convert_by_country
+```
+The finding is not incorrect. Next, we are going to do a t-test on the testing results. Since there is no change in Spain channel, so we should remove spain data first.
+```{r}
+test_df = subset(full_df, country != 'Spain')
+t_test <- t.test(test_df$conversion[test_df$test == 1], test_df$conversion[test_df$test == 0])
+t_test
+```
+The t-test results show there is indeed a statistically significantimprovement in conversion rate. The test group has a conversion rate of 4.3%, and the control group is 4.8%. This is a 10.4% drop, which maybe too dramatic. It can due to the small size of data thus poor statistical power, or the experimenting setup is not randomly selected. We can try sliding variables one by one to investigate what could go wrong.
+```{r sex}
+convert_by_sex <- test_df %>% group_by(sex) %>% summarize(convert_rate_ratio = mean(1-(conversion[test == 1])/mean(conversion[test == 0])))
+convert_by_sex
+```
+Conversion rate is dropping about 10% for both male and female, which is consistant with the overall results.
+
+```{r age}
+convert_by_age <- test_df %>% group_by(age) %>% summarize(convert_rate_ratio = mean(1-(conversion[test == 1])/mean(conversion[test == 0])))
+ggplot(data = convert_by_age, aes(x=age, y=convert_rate_ratio)) + geom_line(stat = 'identity', position = 'identity')
+age_count <- test_df %>% group_by(age) %>% summarize(count = n())
+ggplot(data = age_count, aes(x=age, y=count)) + geom_line(stat = 'identity', position = 'identity')
+```
+Ratios zig-zag around 12% for all ages below 42. The ratio varies dramatically above age 42, which may due to the small population around that age. 
+
+```{r date}
+convert_by_date <- test_df %>% group_by(date) %>% summarize(convert_rate_ratio = mean(1-(conversion[test == 1])/mean(conversion[test == 0])))
+date_count <- test_df %>%  group_by(date) %>% summarize(count = n())
+
+ggplot(data = convert_by_date, aes(x=date, y=convert_rate_ratio)) + geom_bar(stat = 'identity', aes(fill = date))
+ggplot(data = date_count, aes(x=date, y=count)) + geom_bar(stat = 'identity', aes(fill = date))
+```
+From the plot, we notice a couple of things:
+1. Test has constantly been worse than control and there is relatively little variance across days. That probably means that we do have enough data, but there was some bias in the experiment set up.
+2. On a side note, we just ran it for 5 days. We should always run the test for at least 1 full week to capture weekly patterns, 2 weeks would be much better.
+Time to find out the bias! Likely, there is for some reason some segment of users more likely to end up in test or in control, this segment had a significantly above/below conversion rate and this affected the overall results.
+
+In an ideal world, the distribution of people in test and control for each segment should be the same. There are many ways to check this. One way is to build a decision tree where the variables are the user dimensions and the outcome variable is whether the user is in test or control. If the tree splits, it means that for given values of that variable you are more likely to end up in test or control. But this should be impossible! Therefore, if the randomization worked, the tree should not split at all (or at least not be able to separate the two classes well).
+
